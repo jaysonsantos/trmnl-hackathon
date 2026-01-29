@@ -1,0 +1,198 @@
+{% comment %}
+  BVG Journey Planner - TRMNL Template
+  Clean layout with proper spacing for e-ink displays
+{% endcomment %}
+
+{% comment %} === EXTRACT ORIGIN & DESTINATION FROM FIRST JOURNEY === {% endcomment %}
+{% assign first_journey = journeys | first %}
+{% assign origin_name = "" %}
+{% assign dest_name = "" %}
+{% assign origin_short = "" %}
+{% assign dest_short = "" %}
+
+{% for leg in first_journey.legs %}
+  {% unless leg.walking %}
+    {% if origin_name == "" %}
+      {% assign origin_name = leg.origin.name | remove: "(Berlin)" | remove: "Bhf" | strip %}
+      {% assign origin_short = origin_name | remove: "S+U " | remove: "S " | remove: "U " | strip %}
+    {% endif %}
+    {% assign dest_name = leg.destination.name | remove: "(Berlin)" | remove: "Bhf" | strip %}
+    {% assign dest_short = dest_name | remove: "S+U " | remove: "S " | remove: "U " | strip %}
+  {% endunless %}
+{% endfor %}
+
+<div class="layout layout--col gap">
+  {% comment %} === HEADER === {% endcomment %}
+  <div class="flex flex--row flex--center-y gap--small">
+    <span class="title" data-clamp="1">{{ origin_name }}</span>
+    <span class="title text--gray-45">→</span>
+    <span class="title" data-clamp="1">{{ dest_name }}</span>
+  </div>
+
+  <div class="divider"></div>
+
+  {% comment %} === JOURNEY OPTIONS === {% endcomment %}
+  {% if journeys.size == 0 %}
+  <div class="flex flex--col flex--center gap--small">
+    <span class="label label--gray">No journeys found</span>
+  </div>
+  {% else %}
+  <div class="columns gap">
+    {% for journey in journeys %}
+      {% if forloop.index <= 3 %}
+        {% assign first_leg = nil %}
+        {% assign last_leg = nil %}
+        {% assign transport_leg_count = 0 %}
+        
+        {% for leg in journey.legs %}
+          {% unless leg.walking %}
+            {% assign transport_leg_count = transport_leg_count | plus: 1 %}
+            {% if first_leg == nil %}
+              {% assign first_leg = leg %}
+            {% endif %}
+            {% assign last_leg = leg %}
+          {% endunless %}
+        {% endfor %}
+
+        {% if first_leg %}
+          {% assign dep_time = first_leg.departure | date: "%H:%M" %}
+          {% assign arr_time = last_leg.arrival | date: "%H:%M" %}
+          {% assign dep_epoch = first_leg.departure | date: "%s" | plus: 0 %}
+          {% assign arr_epoch = last_leg.arrival | date: "%s" | plus: 0 %}
+          {% assign duration = arr_epoch | minus: dep_epoch | divided_by: 60 %}
+
+          {% assign delay_display = "" %}
+          {% if first_leg.departureDelay and first_leg.departureDelay != 0 %}
+            {% assign delay_min = first_leg.departureDelay | divided_by: 60 %}
+            {% if delay_min > 0 %}
+              {% assign delay_display = "+" | append: delay_min %}
+            {% else %}
+              {% assign delay_display = delay_min %}
+            {% endif %}
+          {% endif %}
+
+          {% assign platform = first_leg.departurePlatform %}
+
+          {% assign lines_array = "" %}
+          {% assign line_count = 0 %}
+          {% for leg in journey.legs %}
+            {% unless leg.walking %}
+              {% if line_count < 3 %}
+                {% if lines_array == "" %}
+                  {% assign lines_array = leg.line.name %}
+                {% else %}
+                  {% assign lines_array = lines_array | append: "," | append: leg.line.name %}
+                {% endif %}
+                {% assign line_count = line_count | plus: 1 %}
+              {% endif %}
+            {% endunless %}
+          {% endfor %}
+          {% assign lines = lines_array | split: "," %}
+          {% assign extra_lines = transport_leg_count | minus: 3 %}
+
+          {% assign transfers_array = "" %}
+          {% assign leg_index = 0 %}
+          {% for leg in journey.legs %}
+            {% unless leg.walking %}
+              {% assign leg_index = leg_index | plus: 1 %}
+              {% if leg_index < transport_leg_count %}
+                {% assign transfer_name = leg.destination.name | remove: "(Berlin)" | remove: "Bhf" | remove: "S+U " | remove: "S " | remove: "U " | strip %}
+                {% if transfers_array == "" %}
+                  {% assign transfers_array = transfer_name %}
+                {% else %}
+                  {% assign transfers_array = transfers_array | append: ", " | append: transfer_name %}
+                {% endif %}
+              {% endif %}
+            {% endunless %}
+          {% endfor %}
+          {% assign transfer_count = transport_leg_count | minus: 1 %}
+
+          {% assign platform_changes = "" %}
+          {% for leg in journey.legs %}
+            {% unless leg.walking %}
+              {% if leg.departurePlatform and leg.plannedDeparturePlatform %}
+                {% if leg.departurePlatform != leg.plannedDeparturePlatform %}
+                  {% assign change_text = leg.line.name | append: ": Pl." | append: leg.departurePlatform %}
+                  {% if platform_changes == "" %}
+                    {% assign platform_changes = change_text %}
+                  {% else %}
+                    {% assign platform_changes = platform_changes | append: ", " | append: change_text %}
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+            {% endunless %}
+          {% endfor %}
+
+          {% if forloop.index == 1 %}
+            {% assign emphasis = "3" %}
+          {% elsif forloop.index == 2 %}
+            {% assign emphasis = "2" %}
+          {% else %}
+            {% assign emphasis = "1" %}
+          {% endif %}
+
+          <div class="column">
+            <div class="item item--emphasis-{{ emphasis }}">
+              <div class="meta">
+                <span class="index">{{ forloop.index }}</span>
+              </div>
+              <div class="content gap--small">
+                <div class="flex flex--row flex--center-y gap--small">
+                  <span class="value value--small value--tnums">{{ dep_time }}</span>
+                  {% if delay_display != "" %}
+                  <span class="label label--small label--inverted">{{ delay_display }}</span>
+                  {% endif %}
+                </div>
+                <div class="flex flex--row flex--center-y gap--xsmall">
+                  {% for line in lines %}
+                    {% assign line_first_char = line | slice: 0 %}
+                    {% if line_first_char == "S" or line_first_char == "U" %}
+                    <span class="label label--small label--inverted">{{ line }}</span>
+                    {% else %}
+                    <span class="label label--small label--outline">{{ line }}</span>
+                    {% endif %}
+                    {% unless forloop.last %}
+                    <span class="label label--small text--gray-45">→</span>
+                    {% endunless %}
+                  {% endfor %}
+                  {% if extra_lines > 0 %}
+                  <span class="label label--small text--gray-45">+{{ extra_lines }}</span>
+                  {% endif %}
+                </div>
+                <div class="flex flex--row flex--center-y gap--small">
+                  <span class="label label--small value--tnums">{{ duration }} min</span>
+                  <span class="label label--small text--gray-45">→</span>
+                  <span class="label label--small value--tnums">{{ arr_time }}</span>
+                </div>
+                <div class="flex flex--row flex--center-y gap--small">
+                  {% if transfer_count == 0 %}
+                  <span class="label label--small label--underline">Direct</span>
+                  {% else %}
+                  <span class="label label--small label--underline">{{ transfer_count }}x</span>
+                  <span class="description" data-clamp="1">{{ transfers_array }}</span>
+                  {% endif %}
+                </div>
+                {% if platform %}
+                <span class="label label--small text--gray-45">Pl. {{ platform }}</span>
+                {% endif %}
+                {% if platform_changes != "" %}
+                <div class="flex flex--row flex--center-y gap--xsmall">
+                  <span class="label label--small label--inverted">!</span>
+                  <span class="label label--small">{{ platform_changes }}</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="title_bar">
+  <img class="image" src="/images/plugins/trmnl--render.svg">
+  <span class="title">BVG</span>
+  <span class="instance">{{ origin_short }} → {{ dest_short }}</span>
+</div>
